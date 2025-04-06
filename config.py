@@ -5,7 +5,7 @@ Configuration settings for the Last.fm recommendation project.
 
 # --- Data Paths ---
 # *** UPDATE THIS PATH to your actual Last.fm dataset file ***
-LASTFM_DATA_PATH = './data/lastfm_user_tracks_jan2021.csv' # Example path - CHANGE THIS
+LASTFM_DATA_PATH = './lastfm_data.csv' # Example path - CHANGE THIS
 
 # --- Preprocessing ---
 MIN_INTERACTIONS_PER_USER = 5  # Min listens per user
