@@ -1,13 +1,14 @@
 # main.py
 """
 Main script to run the Last.fm recommendation system pipeline.
+Implements Content-Based and SVD Collaborative Filtering.
 """
 import pandas as pd
 import data_loader
 import preprocessing
 import eda
 import content_based
-import collaborative_filtering # Imports SVD and ALS functions/checks
+import collaborative_filtering # Only imports SVD functions now
 import evaluation
 import config
 
@@ -29,38 +30,41 @@ def run_pipeline():
 
     # 3. EDA (Optional - Run on data *before* heavy filtering/splitting)
     print("\n--- 3. Performing EDA ---")
+    # Add EDA calls here if desired, e.g.:
     # eda.plot_top_artists(df_interactions)
-    # eda.plot_top_tracks(df_interactions)
-    # eda.plot_user_activity(df_interactions)
-    # Consider sampling for EDA if dataset is very large
 
     # 4. Preprocessing: Filtering & Splitting
     print("\n--- 4. Filtering Sparse Data ---")
     df_filtered = preprocessing.filter_sparse_data(df_interactions)
-
-    if df_filtered.empty:
-        print("Data is empty after filtering. Cannot proceed. Check filtering thresholds.")
-        return
+    if not df_filtered.empty:
+        print(f"DEBUG main: Unique users in df_filtered: {df_filtered['user_id'].nunique()}")
+    else:
+        print("DEBUG main: df_filtered is empty! Check filtering/data.")
+        return # Exit if filtering removed everything
 
     print("\n--- Splitting Data (Time-Based) ---")
     train_df, test_df = preprocessing.time_based_split(df_filtered)
-
-    if train_df.empty:
-        print("Training data is empty after split. Cannot train models.")
+    if not train_df.empty:
+        print(f"DEBUG main: Unique users in train_df: {train_df['user_id'].nunique()}")
+    else:
+        print("DEBUG main: train_df is empty! Cannot train models.")
+        # Decide whether to exit or just skip training/eval
         return
-    if test_df.empty:
-        print("Warning: Test data is empty after split. Evaluation will not run.")
+    if not test_df.empty:
+        print(f"DEBUG main: Unique users in test_df: {test_df['user_id'].nunique()}")
+    else:
+        print("DEBUG main: test_df is empty! Evaluation will be skipped.")
 
 
     # --- Prepare components needed for different models ---
-    # Unique items from training data for CB and potentially mappings
     print("\n--- Preparing Training Set Components ---")
     train_item_metadata = content_based.get_item_metadata_df(train_df)
     all_items_in_train = set(train_item_metadata['item_id'])
 
-    # Sparse matrix and mappings from training data (for ALS and potentially evaluation)
+    # Create sparse matrix and mappings from training data (needed for SVD item map)
     # Use train_df.copy() to avoid modifying the original split dataframe
-    train_sparse_matrix, train_user_map, train_item_map, train_df_indexed = preprocessing.create_user_item_matrix(train_df.copy())
+    # Note: SVD itself doesn't need the matrix, but we need the item_map from this process
+    _, _, train_item_map, _ = preprocessing.create_user_item_matrix(train_df.copy())
 
 
     # 5. Train Models
@@ -93,21 +97,7 @@ def run_pipeline():
     except Exception as e:
         print(f"Error training SVD model: {e}")
 
-    # Collaborative Filtering: ALS (implicit) - Optional but recommended
-    als_model_components = None
-    if collaborative_filtering.IMPLICIT_AVAILABLE:
-         try:
-             print("Training CF Model (ALS)...")
-             # ALS uses the sparse matrix directly
-             als_model = collaborative_filtering.train_als_model(train_sparse_matrix)
-             if als_model:
-                  # Components needed: model, sparse matrix, user map, item map
-                  als_model_components = (als_model, train_sparse_matrix, train_user_map, train_item_map)
-                  print("ALS model trained.")
-         except Exception as e:
-             print(f"Error training ALS model: {e}")
-    else:
-         print("Skipping ALS model training ('implicit' library not installed or import failed).")
+    # --- ALS Training Removed ---
 
 
     # 6. Evaluate Models (only if test_df is not empty)
@@ -118,10 +108,7 @@ def run_pipeline():
         else:
             print("Skipping SVD evaluation (model not trained).")
 
-        if als_model_components:
-             evaluation.evaluate_model(als_model_components, test_df, train_df, model_type='als')
-        else:
-             print("Skipping ALS evaluation (model not trained or library unavailable).")
+        # --- ALS Evaluation Removed ---
 
         if cb_model_components:
             evaluation.evaluate_model(cb_model_components, test_df, train_df, model_type='cb')
@@ -132,34 +119,26 @@ def run_pipeline():
 
     # 7. Generate Example Recommendations (Optional)
     print("\n--- 7. Generating Example Recommendations ---")
-    if not train_df.empty:
-        example_user_id = train_user_map['user_id'].iloc[0] # Pick a user from training map
+    if not train_df.empty and not train_item_map.empty: # Ensure train data and map exist
+        example_user_id = train_df['user_id'].iloc[0] # Pick a user from training data
         print(f"\n--- Example Recommendations for User: {example_user_id} ---")
 
         if svd_model_components:
              try:
                  svd_recs = collaborative_filtering.get_cf_recommendations_surprise(
-                     svd_model_components[0], example_user_id, svd_model_components[1], svd_model_components[2]
+                     svd_model_components[0], example_user_id, svd_model_components[1], svd_model_components[2] # algo, trainset, item_map
                  )
                  print(f"\nSVD Recommendations:")
                  print(svd_recs)
              except Exception as e:
                  print(f"Could not generate SVD recommendations: {e}")
 
-        if als_model_components:
-            try:
-                als_user_idx = train_user_map[train_user_map['user_id'] == example_user_id].index[0]
-                als_recs = collaborative_filtering.get_als_recommendations(
-                    als_model_components[0], als_user_idx, als_model_components[1], als_model_components[3] # model, sparse_matrix, item_map
-                )
-                print(f"\nALS Recommendations:")
-                print(als_recs)
-            except Exception as e:
-                 print(f"Could not generate ALS recommendations: {e}")
+        # --- ALS Example Recommendation Removed ---
 
         if cb_model_components:
              try:
-                 user_liked_items = train_df_indexed[train_df_indexed['user_id'] == example_user_id]['item_id'].tolist()
+                 # Get user history from the original train_df before indexing/duplicates removed
+                 user_liked_items = train_df[train_df['user_id'] == example_user_id]['item_id'].unique().tolist()
                  if user_liked_items:
                      cb_recs = content_based.get_content_based_recommendations(
                          user_liked_items, cb_model_components[0], cb_model_components[1], cb_model_components[2] # sim_matrix, indices, all_items
@@ -172,7 +151,7 @@ def run_pipeline():
                   print(f"Could not generate CB recommendations: {e}")
 
     else:
-        print("Skipping example recommendations (training data is empty).")
+        print("Skipping example recommendations (training data or item map is empty).")
 
 
     print("\n--- Pipeline Finished ---")

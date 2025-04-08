@@ -1,24 +1,14 @@
 # collaborative_filtering.py
 """
-Implementation of Collaborative Filtering.
-Example using SVD from Surprise for implicit binary data.
-Mentions ALS from 'implicit' library as a good alternative.
-
+Implementation of Collaborative Filtering using Matrix Factorization (SVD from Surprise).
 Requires 'surprise': pip install scikit-surprise
-Optional 'implicit': pip install implicit (+ BLAS setup may be needed)
 """
 import pandas as pd
 from surprise import Dataset, Reader, SVD
 from surprise.model_selection import train_test_split as surprise_split
 import config
-from preprocessing import create_user_item_matrix # To get user/item maps if needed elsewhere
-
-try:
-    import threadpoolctl
-    threadpoolctl.threadpool_limits(1, "blas")
-except Exception as e:
-    print(f"Could not set threadpool limits: {e}")
-
+# Removed import create_user_item_matrix (if only used for ALS example previously)
+# Removed implicit library imports and checks
 
 # --- SVD Example (using Surprise) ---
 
@@ -76,7 +66,7 @@ def get_cf_recommendations_surprise(algo, user_id, trainset, item_map, top_n=con
     testset_tuples = [(user_id, trainset.to_raw_iid(item_inner_id), 1.0) for item_inner_id in items_to_predict_inner]
 
     if not testset_tuples:
-        print(f"User {user_id} has interacted with all items or no items left to predict.")
+        # print(f"User {user_id} has interacted with all items or no items left to predict.")
         return []
 
     # Make predictions
@@ -90,64 +80,13 @@ def get_cf_recommendations_surprise(algo, user_id, trainset, item_map, top_n=con
 
     return recommended_items
 
-# --- ALS Example (using implicit library - OPTIONAL but recommended for implicit data) ---
-try:
-    import implicit
-    IMPLICIT_AVAILABLE = True
-except ImportError:
-    IMPLICIT_AVAILABLE = False
-    print("Warning: 'implicit' library not found. Skipping ALS example functions.")
-    print("Install with: pip install implicit")
-
-def train_als_model(sparse_user_item_matrix):
-    """ Trains an ALS model using the implicit library. """
-    if not IMPLICIT_AVAILABLE: return None
-    print("Training ALS model using 'implicit' library...")
-    # Initialize the model
-    # TODO: Tune factors, regularization, iterations
-    model = implicit.als.AlternatingLeastSquares(
-        factors=config.N_LATENT_FACTORS_ALS,
-        regularization=config.REGULARIZATION_ALS,
-        iterations=config.ITERATIONS_ALS,
-        random_state=42
-    )
-
-    # Train the model. Requires items x users matrix.
-    # Our sparse_matrix is users x items, so transpose it.
-    item_user_matrix = sparse_user_item_matrix.T.tocsr()
-    model.fit(item_user_matrix)
-
-    print("ALS model training complete.")
-    return model
-
-def get_als_recommendations(model, user_idx, sparse_user_item_matrix, item_map, top_n=config.N_RECOMMENDATIONS):
-    """ Generates recommendations using a trained implicit ALS model. """
-    if not IMPLICIT_AVAILABLE or model is None: return []
-
-    # Get recommendations (recommend expects user_idx, user_item matrix)
-    # N = top_n + number of items user already interacted with (approx) to ensure we get enough *new* items
-    # A safer way is to request more items and filter afterwards.
-    n_to_request = top_n + int(sparse_user_item_matrix[user_idx].nnz * 1.5) # Heuristic
-    if n_to_request < top_n * 2: n_to_request = top_n * 2 # Ensure requesting a decent amount
-
-
-    # recommended: List of (item_idx, score) tuples
-    recommended_idxs_scores = model.recommend(user_idx, sparse_user_item_matrix[user_idx], N=n_to_request, filter_already_liked_items=True)
-
-    # Map item_idx back to original item_id using item_map
-    recommended_items = []
-    for item_idx, score in recommended_idxs_scores:
-         if item_idx in item_map.index: # Check if index exists in map
-             recommended_items.append(item_map.loc[item_idx, 'item_id'])
-         if len(recommended_items) >= top_n:
-             break
-
-    return recommended_items
+# --- ALS Code Removed ---
 
 
 if __name__ == '__main__':
+    # Simplified example focusing only on SVD
     from data_loader import load_lastfm_data
-    from preprocessing import create_item_id, filter_sparse_data, time_based_split, create_user_item_matrix
+    from preprocessing import create_item_id, filter_sparse_data, time_based_split, create_user_item_matrix # Need maps
 
     df_inter = load_lastfm_data()
     if df_inter is not None:
@@ -156,43 +95,28 @@ if __name__ == '__main__':
         train_df, test_df = time_based_split(df_filtered)
 
         if train_df is not None and not train_df.empty:
-            # --- SVD Example ---
             print("\n--- Running SVD Example ---")
             try:
                  # Train SVD model on the training data
                  svd_model, svd_trainset = train_svd_model_implicit(train_df)
 
-                 # We need item_map from the *training* data context for Surprise prediction mapping
-                 # Recreate matrix and maps based *only* on train_df for this context
-                 _, _, svd_item_map, _ = create_user_item_matrix(train_df.copy())
+                 # Need item_map from the training data context
+                 # This requires running matrix creation on train_df to get the map
+                 _, _, svd_item_map, _ = create_user_item_matrix(train_df.copy()) # Get item map specific to train set
 
                  # Get recommendations for an example user from the train set
-                 example_user_svd = train_df['user_id'].iloc[0]
-                 recommendations_svd = get_cf_recommendations_surprise(svd_model, example_user_svd, svd_trainset, svd_item_map)
-                 print(f"SVD Recommendations for user '{example_user_svd}':")
-                 print(recommendations_svd)
+                 if not svd_item_map.empty: # Check if item map was created
+                      example_user_svd = train_df['user_id'].iloc[0]
+                      recommendations_svd = get_cf_recommendations_surprise(svd_model, example_user_svd, svd_trainset, svd_item_map)
+                      print(f"SVD Recommendations for user '{example_user_svd}':")
+                      print(recommendations_svd)
+                 else:
+                      print("Could not generate SVD recommendations: item map is empty.")
+
             except Exception as e:
                  print(f"Could not run SVD example: {e}")
 
-
-            # --- ALS Example (Optional) ---
-            if IMPLICIT_AVAILABLE:
-                 print("\n--- Running ALS Example ---")
-                 try:
-                     # Create sparse matrix and maps from training data
-                     train_sparse_matrix, train_user_map, train_item_map, train_data_indexed = create_user_item_matrix(train_df.copy())
-
-                     als_model = train_als_model(train_sparse_matrix)
-
-                     if als_model:
-                         # Get an example user's index
-                         example_user_als = train_user_map['user_id'].iloc[0]
-                         example_user_idx = train_user_map[train_user_map['user_id'] == example_user_als].index[0]
-
-                         recommendations_als = get_als_recommendations(als_model, example_user_idx, train_sparse_matrix, train_item_map)
-                         print(f"ALS Recommendations for user '{example_user_als}' (index {example_user_idx}):")
-                         print(recommendations_als)
-                 except Exception as e:
-                     print(f"Could not run ALS example: {e}")
         else:
             print("Training data is empty, cannot run CF examples.")
+
+    # ALS Example section removed
