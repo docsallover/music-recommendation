@@ -4,10 +4,19 @@
     <title>Music Recommendation System</title>
 </head>
 <body>
-    <h1>Enter your Username</h1>
+    <h1>Music Recommendation System</h1>
+
     <form method="POST">
-        <label for="username">Username:</label>
-        <input type="text" id="username" name="username" required><br><br>
+        <label for="username">Select User:</label>
+        <select id="username" name="username" required>
+            {% if users %}
+                {% for user in users %}
+                    <option value="{{ user }}">{{ user }}</option>
+                {% endfor %}
+            {% else %}
+                <option value="" disabled>No users available</option>
+            {% endif %}
+        </select><br><br>
         <input type="submit" value="Get Recommendations">
     </form>
 </body>

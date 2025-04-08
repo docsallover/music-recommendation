@@ -8,13 +8,15 @@ app = Flask(__name__)
 trained_models = {}
 train_data_components = {}
 pipeline_initialized = False
+available_users = []  # Add a new global variable for users
 
 def initialize_pipeline():
-    """Runs the main pipeline once to load models."""
+    """Runs the main pipeline once to load models and users."""
     print("Initializing pipeline and training models...")
     global trained_models
     global train_data_components
     global pipeline_initialized
+    global available_users  # Access the global variable
 
     # Capture the return values from a modified run_pipeline
     results = run_pipeline_for_flask()
@@ -24,6 +26,11 @@ def initialize_pipeline():
         train_data_components['train_df'] = results.get('train_df')
         train_data_components['train_user_map'] = results.get('train_user_map')
         train_data_components['train_item_map'] = results.get('train_item_map')
+
+        # Extract the list of available users
+        if 'train_df' in train_data_components:
+            available_users = sorted(train_data_components['train_df']['user_id'].unique().tolist())
+
         print("Pipeline initialization complete.")
         pipeline_initialized = True
     else:
@@ -105,13 +112,13 @@ def run_pipeline_for_flask():
 @app.route('/', methods=['GET', 'POST'])
 def index():
     global pipeline_initialized
+    global available_users  # Access the global variable
     if not pipeline_initialized:
         initialize_pipeline()
     if request.method == 'POST':
         username = request.form['username']
         return redirect(url_for('recommendations', username=username))
-    return render_template('index.html')
-
+    return render_template('index.html', users=available_users) # Pass the users to the template
 
 @app.route('/recommendations', methods=['GET'])
 def recommendations():
