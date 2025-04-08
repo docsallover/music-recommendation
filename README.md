@@ -46,6 +46,8 @@ The project has the following file structure:
 
 ## How to Use
 
+The system has been tested on Python versions up to 3.11. When running it with higher Python versions, you may encounter errors due to compatibility issues with some pip packages.
+
 To use the system, follow these steps:
 
 1.  **Clone the repository** (if you haven't already).
