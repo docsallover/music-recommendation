@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Music Recommendations for {{ username }}</title>
+</head>
+<body>
+    <h1>Music Recommendations for User: {{ username }}</h1>
+
+    <h2>SVD Recommendations:</h2>
+    {% if svd_recommendations %}
+    <ul>
+        {% for recommendation in svd_recommendations %}
+        <li>{{ recommendation }}</li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p>No SVD recommendations available.</p>
+    {% endif %}
+
+    <h2>Content-Based Recommendations:</h2>
+    {% if cb_recommendations %}
+    <ul>
+        {% for recommendation in cb_recommendations %}
+        <li>{{ recommendation }}</li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p>No content-based recommendations available.</p>
+    {% endif %}
+
+    <p><a href="/">Go back to enter another username</a></p>
+</body>
+</html>

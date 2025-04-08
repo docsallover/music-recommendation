@@ -2,6 +2,7 @@
 """
 Main script to run the Last.fm recommendation system pipeline.
 Implements Content-Based and SVD Collaborative Filtering.
+Prompts user for Username for example recommendations.
 """
 import pandas as pd
 import data_loader
@@ -64,7 +65,8 @@ def run_pipeline():
     # Create sparse matrix and mappings from training data (needed for SVD item map)
     # Use train_df.copy() to avoid modifying the original split dataframe
     # Note: SVD itself doesn't need the matrix, but we need the item_map from this process
-    _, _, train_item_map, _ = preprocessing.create_user_item_matrix(train_df.copy())
+    # Store the user_map as well for validation later
+    _, train_user_map, train_item_map, _ = preprocessing.create_user_item_matrix(train_df.copy())
 
 
     # 5. Train Models
@@ -77,7 +79,6 @@ def run_pipeline():
             print("Training Content-Based Model...")
             cb_feature_cols = ['artist', 'album', 'track'] # Choose features
             cb_similarity_matrix, cb_indices = content_based.build_content_similarity_matrix(train_item_metadata, feature_cols=cb_feature_cols)
-            # Components needed for evaluation/prediction: sim matrix, item->index map, set of all valid items
             cb_model_components = (cb_similarity_matrix, cb_indices, all_items_in_train)
             print("Content-Based similarity matrix built.")
         except Exception as e:
@@ -89,15 +90,11 @@ def run_pipeline():
     svd_model_components = None
     try:
         print("Training CF Model (SVD)...")
-        # Pass the training dataframe directly to the Surprise trainer
         svd_algo, svd_trainset = collaborative_filtering.train_svd_model_implicit(train_df)
-        # Components needed: algo, trainset (for Surprise internal IDs), item_map (for mapping back)
         svd_model_components = (svd_algo, svd_trainset, train_item_map) # Use item_map derived from train_df
         print("SVD model trained.")
     except Exception as e:
         print(f"Error training SVD model: {e}")
-
-    # --- ALS Training Removed ---
 
 
     # 6. Evaluate Models (only if test_df is not empty)
@@ -108,8 +105,6 @@ def run_pipeline():
         else:
             print("Skipping SVD evaluation (model not trained).")
 
-        # --- ALS Evaluation Removed ---
-
         if cb_model_components:
             evaluation.evaluate_model(cb_model_components, test_df, train_df, model_type='cb')
         else:
@@ -117,41 +112,80 @@ def run_pipeline():
     else:
         print("Skipping evaluation because the test set is empty.")
 
-    # 7. Generate Example Recommendations (Optional)
+    # 7. Generate Example Recommendations (Interactive)
     print("\n--- 7. Generating Example Recommendations ---")
-    if not train_df.empty and not train_item_map.empty: # Ensure train data and map exist
-        example_user_id = train_df['user_id'].iloc[0] # Pick a user from training data
-        print(f"\n--- Example Recommendations for User: {example_user_id} ---")
+    # Ensure train data and maps exist to proceed
+    # Use train_user_map which contains the standardized 'user_id' column (holding original usernames)
+    if not train_df.empty and not train_item_map.empty and not train_user_map.empty and 'user_id' in train_user_map.columns:
 
-        if svd_model_components:
+        # --- Get User Input ---
+        # Get valid original usernames from the 'user_id' column in train_user_map
+        valid_usernames = set(train_user_map['user_id'])
+
+        if not valid_usernames:
+             print("No valid users found in the training map to generate recommendations for.")
+        else:
+             # Prompt user for input
              try:
-                 svd_recs = collaborative_filtering.get_cf_recommendations_surprise(
-                     svd_model_components[0], example_user_id, svd_model_components[1], svd_model_components[2] # algo, trainset, item_map
-                 )
-                 print(f"\nSVD Recommendations:")
-                 print(svd_recs)
-             except Exception as e:
-                 print(f"Could not generate SVD recommendations: {e}")
+                 # <<< MODIFIED PROMPT >>>
+                 entered_username = input(f"Enter a Username to generate recommendations for (e.g., one of the {len(valid_usernames)} users in train set): ").strip()
+             except EOFError:
+                 print("\nNo input received. Skipping example recommendations.")
+                 entered_username = None # Ensure variable exists
 
-        # --- ALS Example Recommendation Removed ---
+             if entered_username is not None:
+                 # Validate user input (check if entered username is in the set of valid usernames)
+                 if entered_username in valid_usernames:
+                     print(f"\n--- Generating Recommendations for Username: {entered_username} ---") # <<< MODIFIED PRINT >>>
 
-        if cb_model_components:
-             try:
-                 # Get user history from the original train_df before indexing/duplicates removed
-                 user_liked_items = train_df[train_df['user_id'] == example_user_id]['item_id'].unique().tolist()
-                 if user_liked_items:
-                     cb_recs = content_based.get_content_based_recommendations(
-                         user_liked_items, cb_model_components[0], cb_model_components[1], cb_model_components[2] # sim_matrix, indices, all_items
-                     )
-                     print(f"\nContent-Based Recommendations (based on {len(user_liked_items)} items):")
-                     print(cb_recs)
+                     # --- SVD Recommendations ---
+                     # Pass the entered_username (which corresponds to the original Username value)
+                     if svd_model_components:
+                         try:
+                             svd_recs = collaborative_filtering.get_cf_recommendations_surprise(
+                                 svd_model_components[0], entered_username, svd_model_components[1], svd_model_components[2] # algo, trainset, item_map
+                             )
+                             print(f"\nSVD Recommendations:")
+                             if svd_recs:
+                                  print(svd_recs)
+                             else:
+                                  print("(No recommendations generated by SVD model - user might be unknown to internal model or have interacted with many items)")
+                         except Exception as e:
+                             print(f"Could not generate SVD recommendations: {e}")
+                     else:
+                          print("\nSkipping SVD recommendations (model not trained).")
+
+
+                     # --- Content-Based Recommendations ---
+                     # Use entered_username to filter train_df
+                     if cb_model_components:
+                         try:
+                             # Get user history from the original train_df
+                             user_liked_items = train_df[train_df['user_id'] == entered_username]['item_id'].unique().tolist()
+                             if user_liked_items:
+                                 cb_recs = content_based.get_content_based_recommendations(
+                                     user_liked_items, cb_model_components[0], cb_model_components[1], cb_model_components[2] # sim_matrix, indices, all_items
+                                 )
+                                 print(f"\nContent-Based Recommendations (based on {len(user_liked_items)} items):")
+                                 if cb_recs:
+                                      print(cb_recs)
+                                 else:
+                                      print("(No recommendations generated by CB model)")
+                             else:
+                                  print("\nUser has no known history in training data for Content-Based recommendations.")
+                         except Exception as e:
+                              print(f"Could not generate CB recommendations: {e}")
+                     else:
+                          print("\nSkipping CB recommendations (model not trained).")
+
                  else:
-                      print("\nUser has no history in training data for CB recommendations.")
-             except Exception as e:
-                  print(f"Could not generate CB recommendations: {e}")
+                     # <<< MODIFIED ERROR MESSAGE >>>
+                     print(f"Error: Username '{entered_username}' not found in the training set users.")
+                     # Optional: Print some example valid usernames to help the user
+                     # print("Example valid usernames:", list(valid_usernames)[:5])
 
     else:
-        print("Skipping example recommendations (training data or item map is empty).")
+        print("Skipping example recommendations (training data or necessary maps are empty).")
 
 
     print("\n--- Pipeline Finished ---")
