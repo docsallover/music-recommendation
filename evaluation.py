@@ -88,10 +88,19 @@ def evaluate_model(model_components, test_data, train_data, # Pass train_data fo
                  # Need user index for ALS
                  if user_id in user_map_train['user_id'].values:
                       user_idx = user_map_train[user_map_train['user_id'] == user_id].index[0]
+
+                      # <<< --- ADD THIS CHECK --- >>>
+                      num_users_in_matrix = sparse_matrix_train.shape[0]
+                      if user_idx >= num_users_in_matrix:
+                           print(f"DEBUG EVALUATION ERROR: User ID {user_id} maps to index {user_idx}, but ALS matrix only has {num_users_in_matrix} users (indices 0-{num_users_in_matrix-1}). Skipping user.")
+                           continue # Skip this user - index is invalid!
+                      # <<< --- END CHECK --- >>>
+
                       # item_map_eval maps internal ALS index -> original item_ids
                       recommendations = get_als_recommendations(als_model, user_idx, sparse_matrix_train, item_map_eval, top_n=k)
                  else:
                       # User might be in test but filtered out during sparse matrix creation for train
+                      # print(f"DEBUG: User {user_id} from test set not found in ALS training user map. Skipping.") # Optional debug print
                       continue # Skip user if not in ALS model's user map
             elif model_type == 'cb':
                 user_liked = train_user_items_history.get(user_id, [])

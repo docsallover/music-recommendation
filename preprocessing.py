@@ -45,39 +45,58 @@ def filter_sparse_data(df, user_col='user_id', item_col='item_id',
     print(f"Final data shape after re-checking user counts: {df.shape}")
     return df
 
-
 def create_user_item_matrix(df, user_col='user_id', item_col='item_id'):
     """
     Creates a sparse user-item interaction matrix (binary interaction).
     Assumes df contains one row per listen event.
     """
     print("Creating user-item matrix (binary interactions)...")
+    print(f"DEBUG: Input df shape: {df.shape}")
+    print(f"DEBUG: Input unique users: {df[user_col].nunique()}")
 
     # Important: Drop duplicate user-item interactions if treating as binary (1 listen = interaction)
-    # Keep the first interaction based on timestamp if needed, otherwise just drop duplicates
     df = df.sort_values('timestamp').drop_duplicates(subset=[user_col, item_col], keep='first')
-    print(f"Shape after dropping duplicate user-item interactions: {df.shape}")
+    print(f"DEBUG: Shape after dropping duplicates: {df.shape}")
+    print(f"DEBUG: Unique users after dropping duplicates: {df[user_col].nunique()}") # <<< ADD THIS
 
+    if df.empty:
+        print("ERROR: DataFrame is empty after dropping duplicates!")
+        # Return empty structures or raise an error
+        empty_matrix = csr_matrix((0, 0))
+        empty_map = pd.DataFrame()
+        return empty_matrix, empty_map, empty_map, df
 
     # Create contiguous IDs for users and items
     df['user_idx'] = df[user_col].astype('category').cat.codes
     df['item_idx'] = df[item_col].astype('category').cat.codes
+    print(f"DEBUG: Unique user_idx count after .cat.codes: {df['user_idx'].nunique()}") # <<< ADD THIS
+    print(f"DEBUG: Max user_idx: {df['user_idx'].max()}") # <<< ADD THIS
+    print(f"DEBUG: Unique item_idx count after .cat.codes: {df['item_idx'].nunique()}") # <<< ADD THIS
 
     # Get mappings for later use
     user_map = df[['user_idx', user_col]].drop_duplicates().set_index('user_idx')
     item_map = df[['item_idx', item_col]].drop_duplicates().set_index('item_idx')
-    # Add artist/track back to item_map for convenience
     item_info = df[['item_idx', 'artist', 'track']].drop_duplicates().set_index('item_idx')
     item_map = item_map.join(item_info)
 
-
     # Create the sparse matrix with binary interaction values (1)
-    interaction_values = np.ones(df.shape[0], dtype=np.float32) # Use float for potential compatibility
+    interaction_values = np.ones(df.shape[0], dtype=np.float32)
+    num_users = df['user_idx'].nunique() # Use calculated nunique value
+    num_items = df['item_idx'].nunique() # Use calculated nunique value
+
+    # <<< ADDED Check >>>
+    if num_users <= 0 or num_items <= 0:
+         print(f"ERROR: Invalid matrix dimensions calculated: ({num_users}, {num_items})")
+         empty_matrix = csr_matrix((0, 0))
+         empty_map = pd.DataFrame()
+         return empty_matrix, empty_map, empty_map, df
+
+
+    print(f"DEBUG: Creating matrix with explicit shape: ({num_users}, {num_items})") # <<< ADD THIS
     sparse_matrix = csr_matrix((interaction_values, (df['user_idx'], df['item_idx'])),
-                              shape=(df['user_idx'].nunique(), df['item_idx'].nunique()))
+                              shape=(num_users, num_items)) # Use calculated shape
 
     print(f"Created sparse matrix with shape: {sparse_matrix.shape}")
-    # Return df with new indices and dropped duplicates
     return sparse_matrix, user_map, item_map, df
 
 

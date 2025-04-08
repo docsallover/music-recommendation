@@ -13,6 +13,13 @@ from surprise.model_selection import train_test_split as surprise_split
 import config
 from preprocessing import create_user_item_matrix # To get user/item maps if needed elsewhere
 
+try:
+    import threadpoolctl
+    threadpoolctl.threadpool_limits(1, "blas")
+except Exception as e:
+    print(f"Could not set threadpool limits: {e}")
+
+
 # --- SVD Example (using Surprise) ---
 
 def train_svd_model_implicit(df_interactions, user_col='user_id', item_col='item_id'):
