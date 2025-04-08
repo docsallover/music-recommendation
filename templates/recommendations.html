@@ -1,33 +1,75 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Music Recommendations for {{ username }}</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ML Music Recommendation System</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
+    <style>
+        body {
+            background-color: #e4e2e2;
+        }
+        .card {
+            background-color: #ffffff;
+            border: 1px solid rgba(0, 0, 0, 0.1);
+            border-radius: 0.5rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+        .card-title {
+            color: #000;
+            margin-bottom: 1rem;
+            text-align: center;
+        }
+        .recommendation-list {
+            padding-left: 20px;
+            margin-bottom: 1rem;
+            list-style-position: inside;
+        }
+        .recommendation-list li{
+           color:#000;
+        }
+        .back-button {
+            margin-top: 1rem;
+        }
+    </style>
 </head>
 <body>
-    <h1>Music Recommendations for User: {{ username }}</h1>
+    <div class="container d-flex justify-content-center align-items-center" style="min-height: 100vh;">
+        <div class="card w-100 p-5">
+            <div class="card-body">
+                <h1 class="card-title">Music Recommendations for User: {{ username }}</h1>
+                <div class="row mt-2">
+                    <div class="col-md-6">
+                        <h2 class="card-title text-start">SVD Recommendations:</h2>
+                        {% if svd_recommendations %}
+                        <ul class="recommendation-list">
+                            {% for recommendation in svd_recommendations %}
+                            <li>{{ recommendation }}</li>
+                            {% endfor %}
+                        </ul>
+                        {% else %}
+                        <p>No SVD recommendations available.</p>
+                        {% endif %}
+                    </div>
+                    <div class="col-md-6">
+                        <h2 class="card-title text-start">Content-Based Recommendations:</h2>
+                        {% if cb_recommendations %}
+                        <ul class="recommendation-list">
+                            {% for recommendation in cb_recommendations %}
+                            <li>{{ recommendation }}</li>
+                            {% endfor %}
+                        </ul>
+                        {% else %}
+                        <p>No content-based recommendations available.</p>
+                        {% endif %}
+                    </div>
+                </div>
+                <a href="/" class="btn btn-primary back-button">Go back to enter another username</a>
+            </div>
+        </div>
+    </div>
 
-    <h2>SVD Recommendations:</h2>
-    {% if svd_recommendations %}
-    <ul>
-        {% for recommendation in svd_recommendations %}
-        <li>{{ recommendation }}</li>
-        {% endfor %}
-    </ul>
-    {% else %}
-    <p>No SVD recommendations available.</p>
-    {% endif %}
-
-    <h2>Content-Based Recommendations:</h2>
-    {% if cb_recommendations %}
-    <ul>
-        {% for recommendation in cb_recommendations %}
-        <li>{{ recommendation }}</li>
-        {% endfor %}
-    </ul>
-    {% else %}
-    <p>No content-based recommendations available.</p>
-    {% endif %}
-
-    <p><a href="/">Go back to enter another username</a></p>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
