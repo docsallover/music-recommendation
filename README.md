@@ -74,6 +74,16 @@ The system requires the following dependencies, which are listed in the `require
 * scipy
 * surprise (scikit-surprise)
 
+## Screenshots
+
+Here are some screenshots of the system:
+
+**Homepage with User Selection**
+![Homepage with User Selection](screenshots/index-output.png)
+
+**Recommendations Page**
+![Recommendations Page](screenshots/recommendation-output.png)
+
 ## License
 
 This project is licensed under the MIT License. See the `LICENSE` file for more details.
